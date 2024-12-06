@@ -1,0 +1,274 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, learning_curve, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, VotingClassifier
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, roc_curve, precision_recall_curve
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the data
+data = pd.read_csv("data.csv")
+
+# Preprocess the data (assuming 'diagnosis' is the target column)
+X = data.drop(columns=['diagnosis', 'Unnamed: 32'])
+y = data['diagnosis']
+
+# Convert target labels to binary (M = 1, B = 0)
+y = y.map({'M': 1, 'B': 0})
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Standardize the data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+####################################################################################################
+# Feature Selection using Random Forest
+####################################################################################################
+
+# Initialize RandomForest for feature selection
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(X_train_scaled, y_train)
+
+# Get feature importances
+importances = rf.feature_importances_
+
+# Select features with non-zero importance
+selected_features = X.columns[importances > 0]
+X_train_selected = X_train_scaled[:, importances > 0]
+X_test_selected = X_test_scaled[:, importances > 0]
+
+####################################################################################################
+# Hyperparameter Tuning using GridSearchCV
+####################################################################################################
+
+# Example for Random Forest
+param_grid_rf = {
+    'n_estimators': [100, 200],
+    'max_depth': [10, 20, None],
+    'min_samples_split': [2, 5],
+    'min_samples_leaf': [1, 2],
+    'bootstrap': [True, False]
+}
+grid_search_rf = GridSearchCV(estimator=RandomForestClassifier(random_state=42), param_grid=param_grid_rf, cv=5)
+grid_search_rf.fit(X_train_selected, y_train)
+print(f"Best Parameters for Random Forest: {grid_search_rf.best_params_}")
+
+####################################################################################################
+# Model Evaluation Function
+####################################################################################################
+
+def evaluate_model(model, X_train, X_test, y_train, y_test):
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    y_pred_prob = model.predict_proba(X_test)[:, 1] if hasattr(model, 'predict_proba') else y_pred
+    
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, pos_label=1)  # Set pos_label to 1 (malignant)
+    recall = recall_score(y_test, y_pred, pos_label=1)  # Set pos_label to 1 (malignant)
+    f1 = f1_score(y_test, y_pred, pos_label=1)  # Set pos_label to 1 (malignant)
+    roc_auc = roc_auc_score(y_test, y_pred_prob)
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    
+    fpr, tpr, thresholds = roc_curve(y_test, y_pred_prob)
+    plt.plot(fpr, tpr, label=f"{model.__class__.__name__} (AUC = {roc_auc:.2f})")
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc="lower right")
+    
+    return accuracy, precision, recall, f1, roc_auc, conf_matrix
+
+####################################################################################################
+# Train and Evaluate Models
+####################################################################################################
+
+# Random Forest (Bagging)
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_acc, rf_prec, rf_recall, rf_f1, rf_roc_auc, rf_conf_matrix = evaluate_model(rf_model, X_train_selected, X_test_selected, y_train, y_test)
+print(f"Random Forest - Accuracy: {rf_acc:.4f}, Precision: {rf_prec:.4f}, Recall: {rf_recall:.4f}, F1: {rf_f1:.4f}, ROC AUC: {rf_roc_auc:.4f}")
+print(f"Confusion Matrix:\n{rf_conf_matrix}\n")
+
+# XGBoost (Boosting)
+xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+xgb_acc, xgb_prec, xgb_recall, xgb_f1, xgb_roc_auc, xgb_conf_matrix = evaluate_model(xgb_model, X_train_selected, X_test_selected, y_train, y_test)
+print(f"XGBoost - Accuracy: {xgb_acc:.4f}, Precision: {xgb_prec:.4f}, Recall: {xgb_recall:.4f}, F1: {xgb_f1:.4f}, ROC AUC: {xgb_roc_auc:.4f}")
+print(f"Confusion Matrix:\n{xgb_conf_matrix}\n")
+
+# Support Vector Machine (SVM)
+svm_model = SVC(probability=True, random_state=42)
+svm_acc, svm_prec, svm_recall, svm_f1, svm_roc_auc, svm_conf_matrix = evaluate_model(svm_model, X_train_selected, X_test_selected, y_train, y_test)
+print(f"SVM - Accuracy: {svm_acc:.4f}, Precision: {svm_prec:.4f}, Recall: {svm_recall:.4f}, F1: {svm_f1:.4f}, ROC AUC: {svm_roc_auc:.4f}")
+print(f"Confusion Matrix:\n{svm_conf_matrix}\n")
+
+# Logistic Regression
+logreg_model = LogisticRegression(max_iter=1000, random_state=42)
+logreg_acc, logreg_prec, logreg_recall, logreg_f1, logreg_roc_auc, logreg_conf_matrix = evaluate_model(logreg_model, X_train_selected, X_test_selected, y_train, y_test)
+print(f"Logistic Regression - Accuracy: {logreg_acc:.4f}, Precision: {logreg_prec:.4f}, Recall: {logreg_recall:.4f}, F1: {logreg_f1:.4f}, ROC AUC: {logreg_roc_auc:.4f}")
+print(f"Confusion Matrix:\n{logreg_conf_matrix}\n")
+
+# Bagging Classifier
+bagging_model = BaggingClassifier(n_estimators=100, random_state=42)
+bagging_acc, bagging_prec, bagging_recall, bagging_f1, bagging_roc_auc, bagging_conf_matrix = evaluate_model(bagging_model, X_train_selected, X_test_selected, y_train, y_test)
+print(f"Bagging Classifier - Accuracy: {bagging_acc:.4f}, Precision: {bagging_prec:.4f}, Recall: {bagging_recall:.4f}, F1: {bagging_f1:.4f}, ROC AUC: {bagging_roc_auc:.4f}")
+print(f"Confusion Matrix:\n{bagging_conf_matrix}\n")
+
+# Cross-validation with Stratified KFold
+cv = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
+for model in [rf_model, xgb_model, svm_model, logreg_model, bagging_model]:
+    cv_scores = cross_val_score(model, X_train_selected, y_train, cv=cv, scoring='accuracy')
+    print(f"{model.__class__.__name__} Cross-Validation Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+
+# Voting Classifier
+voting_clf = VotingClassifier(estimators=[ 
+    ('rf', RandomForestClassifier(n_estimators=100, random_state=42)),
+    ('xgb', XGBClassifier(use_label_encoder=False, eval_metric='logloss')),
+    ('logreg', LogisticRegression(max_iter=1000, random_state=42)),
+    ('bagging', BaggingClassifier(n_estimators=100, random_state=42))
+], voting='hard')
+
+voting_clf.fit(X_train_selected, y_train)
+y_pred_voting = voting_clf.predict(X_test_selected)
+print("Voting Classifier Accuracy:", accuracy_score(y_test, y_pred_voting))
+
+####################################################################################################
+# Learning Curve for Random Forest
+####################################################################################################
+
+train_sizes, train_scores, test_scores = learning_curve(RandomForestClassifier(), X_train_selected, y_train, cv=5)
+plt.plot(train_sizes, np.mean(train_scores, axis=1), label='Training score')
+plt.plot(train_sizes, np.mean(test_scores, axis=1), label='Cross-validation score')
+plt.xlabel('Training size')
+plt.ylabel('Score')
+plt.legend(loc='best')
+plt.title('Learning Curve - Random Forest')
+plt.show()
+
+# Confusion Matrix Plot for Random Forest
+sns.heatmap(rf_conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=['Benign', 'Malignant'], yticklabels=['Benign', 'Malignant'])
+plt.title('Confusion Matrix - Random Forest')
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.show()
+
+plt.show()
+
+
+"""
+
+1. Random Forest
+Best Hyperparameters:
+bootstrap: True,
+max_depth: 10,
+min_samples_leaf: 1,
+min_samples_split: 5,
+n_estimators: 200
+Performance:
+Accuracy: 97.66%
+Precision: 98.36%
+Recall: 95.24%
+F1 Score: 96.77%
+ROC AUC: 0.9965
+Confusion Matrix:
+True Positives (TP): 60
+False Positives (FP): 1
+False Negatives (FN): 3
+True Negatives (TN): 107
+2. XGBoost
+Performance:
+Accuracy: 97.08%
+Precision: 95.31%
+Recall: 96.83%
+F1 Score: 96.06%
+ROC AUC: 0.9966
+Confusion Matrix:
+TP: 61
+FP: 3
+FN: 2
+TN: 105
+Notes: There is a warning related to the use of use_label_encoder, but it does not affect the results.
+3. SVM (Support Vector Machine)
+Performance:
+Accuracy: 97.66%
+Precision: 96.83%
+Recall: 96.83%
+F1 Score: 96.83%
+ROC AUC: 0.9969
+Confusion Matrix:
+TP: 61
+FP: 2
+FN: 2
+TN: 106
+4. Logistic Regression
+Performance:
+Accuracy: 98.25%
+Precision: 96.88%
+Recall: 98.41%
+F1 Score: 97.64%
+ROC AUC: 0.9979
+Confusion Matrix:
+TP: 62
+FP: 2
+FN: 1
+TN: 106
+5. Bagging Classifier
+Performance:
+Accuracy: 95.91%
+Precision: 95.16%
+Recall: 93.65%
+F1 Score: 94.40%
+ROC AUC: 0.9915
+Confusion Matrix:
+TP: 59
+FP: 3
+FN: 4
+TN: 105
+6. Cross-Validation Accuracy:
+Random Forest: 95.49% (+/- 2.57%)
+XGBoost: 95.74% (+/- 2.02%)
+SVC: 97.23% (+/- 2.01%)
+Logistic Regression: 97.99% (+/- 2.05%)
+Bagging Classifier: 94.49% (+/- 2.90%)
+7. Voting Classifier (Ensemble of Random Forest, XGBoost, SVM, and Logistic Regression)
+Performance:
+Accuracy: 97.08%
+Precision: Not explicitly provided, but it's likely to be a weighted average of the individual models.
+Recall: Similarly, it's a combination of the base models.
+F1 Score: Likely a combination of the base models.
+ROC AUC: Likely benefits from the averaging of base model predictions.
+Notes: This is a combination of several models, and the results seem to be close to XGBoost and SVM.
+Comparison and Insights:
+Best Model by Accuracy:
+
+Logistic Regression achieves the highest accuracy (98.25%) among all models, but the difference is very small compared to Random Forest (97.66%) and SVM (97.66%).
+Precision and Recall:
+
+Random Forest has the highest precision (98.36%) but slightly lower recall (95.24%) compared to others.
+Logistic Regression achieves a very high recall (98.41%), with a slight trade-off in precision (96.88%).
+SVM performs consistently with high precision (96.83%) and recall (96.83%), making it a balanced model.
+F1 Score:
+
+Logistic Regression has the highest F1 score (97.64%), closely followed by Random Forest (96.77%) and SVM (96.83%).
+ROC AUC:
+
+All models perform excellently with ROC AUC scores above 0.99, indicating very good performance in distinguishing between the classes.
+The Logistic Regression model has the highest ROC AUC (0.9979), but the differences are marginal across the models.
+Cross-Validation:
+
+The models show relatively high cross-validation accuracy with Logistic Regression having the highest cross-validation score (97.99%).
+Bagging Classifier has the lowest cross-validation accuracy (94.49%).
+Voting Classifier:
+
+The Voting Classifier model (which combines Random Forest, XGBoost, SVM, and Logistic Regression) achieves 97.08% accuracy, which is comparable to the performance of individual models like XGBoost and SVM.
+Summary:
+Logistic Regression stands out for its overall high accuracy, precision, recall, F1 score, and ROC AUC, making it a strong model for the classification task.
+Random Forest and SVM perform very well, with Random Forest having the best precision, and SVM showing a very balanced performance across precision and recall.
+Bagging Classifier is slightly less effective compared to other models in terms of accuracy and ROC AUC, but still performs decently.
+The Voting Classifier, which aggregates the predictions from multiple models, shows results similar to XGBoost and SVM, making it a robust choice if you want to combine the strengths of various algorithms.
+
+"""
