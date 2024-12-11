@@ -1,7 +1,6 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
 
 ################################################################### Handling the outliers #############################################################################################
 data_with_outliers = pd.read_csv("data.csv")
@@ -28,24 +27,6 @@ data_with_outliers = data_with_outliers.drop(columns=['id', 'Unnamed: 32'], erro
 # Combine features and target into a single DataFrame
 X_with_target = data_with_outliers.copy()
 
-# 1. Multi collinearity Assesment
-correlation_matrix = X_with_target.drop(columns=['diagnosis']).corr()
-plt.figure(figsize=(20, 15))
-sns.heatmap(correlation_matrix, annot=True, fmt='.2f', cmap='coolwarm', linewidths=0.5)
-plt.title('Correlation Heatmap of Features')
-plt.savefig('corr_heat_map.png')
-
-# 2. Checking for class imbalance
-# Countplot of the target variable
-plt.figure(figsize=(8, 6))
-sns.countplot(x=X_with_target['diagnosis'])
-plt.title('Count of Malignant and Benign')
-plt.savefig('class_imabalance_check.png')
-
-# Check the distribution of classes
-print(X_with_target['diagnosis'].value_counts())
-X_with_target['diagnosis'] = X_with_target['diagnosis'].astype('category')
-
 # After exploration, spliting the data into X and y
 X = X_with_target.drop(columns=['diagnosis'])
 y = X_with_target['diagnosis']
@@ -63,25 +44,20 @@ feature_columns = [
     'compactness_worst', 'concavity_worst', 'concave points_worst', 'symmetry_worst', 'fractal_dimension_worst'
 ]
 
-# Spliting the feature columns into subsets of 5 features each (for better visibility)
+# Splitting the feature columns into subsets of 5 features each (for better visibility)
 feature_subsets = [feature_columns[i:i + 5] for i in range(0, len(feature_columns), 5)]
 
-# Loop through feature_subsets to create and save separate pairplots
+# Loop through feature_subsets to create and display separate pairplots
 for i, subset in enumerate(feature_subsets):
-    # Create a new figure for each subset of 5 features
-    plt.figure(figsize=(10, 8))  # Adjust the figure size as needed
-    
     # Generate the pairplot for the selected subset, using X_with_target for diagnosis
     sns.pairplot(X_with_target[subset + ['diagnosis']], hue='diagnosis', height=2.5)
+    
+    # Adjust the title for each pairplot
     plt.suptitle(f'Pairplot of Features: {", ".join(subset)}', fontsize=16)
     
-    # Ensure layout is adjusted before saving
-    plt.tight_layout()  
+    # Adjust the layout for better display
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.95)  # Adjust the top space to avoid title overlap
     
-    # Save the plot to a file
-    filename = f'pairplot_{i+1}.png'  # File name, you can change the format to .jpg, .pdf, etc.
-    plt.savefig(filename)
-    print(f"Saved: {filename}")
-    
-    # Close the current figure to make sure the next plot is created separately
-    plt.close()
+    # Display the pairplot
+    plt.show()  # Display the plot interactively
