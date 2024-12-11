@@ -156,8 +156,6 @@ plt.xlabel('Predicted')
 plt.ylabel('True')
 plt.show()
 
-plt.show()
-
 
 """
 
